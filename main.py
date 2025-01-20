@@ -42,7 +42,7 @@ async def slots_available(
         end_date = ist.localize(datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1))
     else:
         # Default to one day after start_date
-        end_date = start_date + timedelta(days=1)
+        end_date = start_date + timedelta(hours=23, minutes=59, seconds=59)
 
     # Authenticate with Google Calendar
     service = authenticate_google_calendar()
@@ -56,17 +56,23 @@ async def slots_available(
 @app.post("/schedule_interview")
 async def schedule_interview_api(request: InterviewRequest):
     try:
-        # Define timezone-aware datetime ranges
+        # Define timezone
         ist = pytz.timezone("Asia/Kolkata")
-        start_date = ist.localize(datetime(2025, 1, 20, 0, 0, 0))
-        end_date = start_date + timedelta(weeks=1)
 
-        # Fetch events
+        # Parse the requested date
+        try:
+            user_date = datetime.strptime(request.date, "%Y-%m-%d")
+            start_date = ist.localize(datetime(user_date.year, user_date.month, user_date.day, 0, 0, 0))
+            end_date = start_date + timedelta(hours=23, minutes=59, seconds=59)  # End date is the same day
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use 'YYYY-MM-DD'.")
+
+        # Fetch events from the calendar
         events = get_calendar_events(service, start_date, end_date)
 
         # Find available slots
         available_slots = find_available_slots(events, start_date, end_date)
-        print(len(available_slots))
+        print(f"Available slots: {len(available_slots)}")
         for slot in available_slots:
             print(f"Available slot: {slot[0]} to {slot[1]}")
 
@@ -74,11 +80,11 @@ async def schedule_interview_api(request: InterviewRequest):
         recruiters = list(recruiters_collection.find())
         candidate = {"name": request.candidate_name, "skillset": request.skillset, "email": request.email}
 
-        print("candidate",candidate)
+        print("Candidate:", candidate)
 
         # Match candidate to recruiters
         matches, _ = match_candidates_to_recruiters([candidate], recruiters)
-        print("matched ",matches,_)
+        print("Matches:", matches)
         if not matches:
             raise HTTPException(status_code=404, detail="No matching recruiter found for the candidate's skillset.")
 
